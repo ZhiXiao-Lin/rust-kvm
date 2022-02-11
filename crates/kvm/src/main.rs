@@ -1,8 +1,14 @@
 extern crate kvm_bindings;
 extern crate kvm_ioctls;
+extern crate libc;
+#[macro_use]
+extern crate vmm_sys_util;
 
+use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
 use kvm_ioctls::{Kvm, VcpuFd, VmFd};
+
+ioctl_io_nr!(KVM_GET_API_VERSION, KVMIO, 0x00);
 
 fn main() {
     use std::io::Write;
@@ -39,7 +45,6 @@ fn main() {
             0x14, /* b <this address>; shouldn't get here, but if so loop forever */
         ];
     }
-
     let kvm = Kvm::new().unwrap();
 
     let vm = kvm.create_vm().unwrap();
@@ -139,5 +144,27 @@ fn main() {
             }
             r => panic!("Unexpected exit reason: {:?}", r),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use std::os::unix::io::FromRawFd;
+
+    use libc::{c_char, open, O_RDWR};
+    use vmm_sys_util::ioctl::{ioctl, ioctl_with_val};
+
+    use super::*;
+    const KVM_PATH: &str = "/dev/kvm\0";
+
+    #[test]
+    fn get_version() {
+        let sys_fd = unsafe { open(KVM_PATH.as_ptr() as *const c_char, O_RDWR) };
+        println!("{}", sys_fd);
+        assert!(sys_fd >= 0);
+
+        let ret = unsafe { ioctl(&File::from_raw_fd(sys_fd), KVM_GET_API_VERSION()) };
+        assert_eq!(ret as u32, KVM_API_VERSION);
     }
 }
